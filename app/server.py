@@ -1,4 +1,10 @@
 import logging
+from flask import Flask, request, jsonify, g
+import asyncio
+
+import string
+import random 
+
 from tokenize import generate_tokens
 
 import numpy as np
@@ -9,10 +15,6 @@ from transformers import (
     GPT2LMHeadModel,
     GPT2Tokenizer,
 )
-
-import tornado.ioloop
-import tornado.web
-
 
 logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
@@ -59,10 +61,12 @@ device = torch.device("cpu")
 
 class Gen:
     def __init__(self) -> None:
+        logger.info("initializing model")
+
         config = json.load(open("generation_config.json"))
         model_type = config['model_type']
         model_path = config['model_name_or_path']
-        
+
         self.length = config['length']
         self.temperature = config['temperature']
         self.k = config['k']
@@ -71,7 +75,7 @@ class Gen:
         self.stop_token = config['stop_token']
 
         set_seed(n_gpu=0, seed=config['seed'])
-        
+
         # Initialize the model and tokenizer
         try:
             model_class, tokenizer_class = MODEL_CLASSES[model_type]
@@ -81,14 +85,15 @@ class Gen:
         self.tokenizer = tokenizer_class.from_pretrained(model_path)
         self.model = model_class.from_pretrained(model_path)
         self.model.to(device)
-        
-        config['length'] = adjust_length_to_model(self.length, max_sequence_length=self.model.config.max_position_embeddings)
+
+        self.length = adjust_length_to_model(self.length, max_sequence_length=self.model.config.max_position_embeddings)
 
         logger.info(device)
 
     def generate(self, input_text) -> str:
         # prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
-        prompt_text = input_text.replace('\n', ' ')
+        prompt_text = input_text
+        promt_lines = len(input_text.split('\n'))
 
         encoded_prompt = self.tokenizer.encode(prompt_text, add_special_tokens=False, return_tensors="pt")
         encoded_prompt = encoded_prompt.to(device)
@@ -130,33 +135,39 @@ class Gen:
         )
 
         generated_sequences.append(total_sequence)
-        
-        return generated_sequences[0].split('\n')[1]
-    
+        print(generated_sequences[0].split('\n'))
 
-g = Gen()
+        res = generated_sequences[0].split('\n')
+        if res[0] != '':
+            return res[0]
+        return res[1]
 
-class MainHandler(tornado.web.RequestHandler):
-    def set_default_headers(self):
-        self.set_header("Content-Type", 'application/json')
+cache = {
+    'model': None
+}
 
-    def post(self):
-        data = tornado.escape.json_decode(self.request.body)
-        text = g.generate(data['text'])
-        r = tornado.escape.json_encode({'text': text})
-        print(text)
-        self.write(r)
+application = Flask(__name__)
 
-def make_app():
-    return tornado.web.Application([
-        (r"/generate", MainHandler),
-    ])
+def get_model():
+    if cache['model'] is None:
+        cache['model'] = Gen()
+    return cache['model']
 
-if __name__ == "__main__":
-    app = make_app()
-    app.listen(8888)
-    tornado.ioloop.IOLoop.current().start()
+@application.route("/", methods=['POST'])
+def generate():
+    model = get_model()
+    set_seed(0, random.randint(100000, 999999))
+    data = request.json
+    text = model.generate(data['text'])
+    print(text)
+    return jsonify({'text': text})
+
+async def init_model():
+    await asyncio.sleep(1)
+    get_model()
+
+asyncio.run(init_model())
 
 # if __name__ == "__main__":
-#    answ = g.generate("привет")
-#    print(answ)
+#   answ = g.generate("привет")
+#   print(answ)
