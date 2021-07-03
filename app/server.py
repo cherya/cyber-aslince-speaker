@@ -153,7 +153,7 @@ def get_model():
         cache['model'] = Gen()
     return cache['model']
 
-@application.route("/", methods=['POST'])
+@application.route("/aslince", methods=['POST'])
 def generate():
     model = get_model()
     set_seed(0, random.randint(100000, 999999))
@@ -161,12 +161,6 @@ def generate():
     text = model.generate(data['text'])
     print(text)
     return jsonify({'text': text})
-
-async def init_model():
-    await asyncio.sleep(1)
-    get_model()
-
-asyncio.run(init_model())
 
 # if __name__ == "__main__":
 #   answ = g.generate("привет")
