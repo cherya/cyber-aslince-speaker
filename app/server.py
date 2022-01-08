@@ -12,7 +12,7 @@ model = GPT2LMHeadModel.from_pretrained("model/")
 
 application = Flask(__name__)
 
-@application.route("/aslince", methods=['POST'])
+@application.route("/aslince/", methods=['POST'])
 def generate():
     text = request.json['text']
     text += "<end>"
@@ -41,14 +41,13 @@ def generate():
     sticker = ''
     if resp.lower().startswith('sticker'):
         m = re.search(r'\d+', resp)
-        try:
-            sticker = int(resp[m.start():m.end()])
-        except:
-            sticker = 0
+        sticker = resp[m.start():m.end()]
+        resp = ""
+
+    if len(resp) > 140:
+        resp = resp.split("\n")[0]
 
     return jsonify({'text': resp, 'sticker': sticker})
-
-application.run()
 
 # if __name__ == "__main__":
 #   answ = g.generate("привет")
